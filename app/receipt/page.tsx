@@ -221,6 +221,10 @@ export default function ReceiptPage() {
                   </div>
                   <div className="flex items-start gap-2">
                     <span className="text-green-600">✓</span>
+                    <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>Product quantities for each item</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-600">✓</span>
                     <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>Expiry dates for each item</span>
                   </div>
                   <div className="flex items-start gap-2">
