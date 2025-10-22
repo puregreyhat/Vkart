@@ -139,3 +139,14 @@ export function getStorageInstructions(category: string, productName: string, pr
 export function formatCurrency(amount: number): string {
   return `₹${amount.toFixed(2)}`;
 }
+
+// NEW: Email normalization for consistent matching
+export function normalizeEmail(email: string): string {
+  return email.toLowerCase().trim();
+}
+
+// NEW: Email validation
+export function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email.trim());
+}

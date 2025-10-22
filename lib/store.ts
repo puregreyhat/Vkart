@@ -24,6 +24,9 @@ export interface Product {
 
 export interface OrderData {
   orderId: string;
+  email: string; // NEW: customer email for API sync
+  created_at: string; // NEW: ISO timestamp when order was created
+  updated_at: string; // NEW: ISO timestamp when order was last updated
   orderDate: string;
   deliveryAddress: string;
   customerName: string;
@@ -54,6 +57,7 @@ interface CartStore {
 interface CheckoutStore {
   customerInfo: {
     name: string;
+    email: string; // NEW: customer email
     phone: string;
     address: string;
   };
@@ -63,6 +67,15 @@ interface CheckoutStore {
 interface OrderStore {
   lastOrder: OrderData | null;
   setLastOrder: (order: OrderData) => void;
+}
+
+// NEW: Global orders store for API sync
+interface AllOrdersStore {
+  orders: OrderData[];
+  addOrder: (order: OrderData) => void;
+  getOrdersByEmail: (email: string) => OrderData[];
+  getLatestOrderByEmail: (email: string) => OrderData | null;
+  getOrdersSince: (email: string, since: string) => OrderData[];
 }
 
 export const useCartStore = create<CartStore>()(
@@ -122,6 +135,7 @@ export const useCheckoutStore = create<CheckoutStore>()(
     (set) => ({
       customerInfo: {
         name: '',
+        email: '',
         phone: '',
         address: '',
       },
@@ -145,6 +159,43 @@ export const useOrderStore = create<OrderStore>()(
     }),
     {
       name: 'order-storage',
+      storage: createStorage(),
+    } as any
+  )
+);
+
+// NEW: Global orders store for API sync with NoshNurture
+export const useAllOrdersStore = create<AllOrdersStore>()(
+  persist(
+    (set, get) => ({
+      orders: [],
+      addOrder: (order) => {
+        const orders = get().orders;
+        // Add new order to the beginning of the array (most recent first)
+        set({ orders: [order, ...orders] });
+      },
+      getOrdersByEmail: (email) => {
+        const normalizedEmail = email.toLowerCase().trim();
+        return get().orders.filter(
+          (order) => order.email.toLowerCase().trim() === normalizedEmail
+        );
+      },
+      getLatestOrderByEmail: (email) => {
+        const ordersByEmail = get().getOrdersByEmail(email);
+        if (ordersByEmail.length === 0) return null;
+        // Orders are stored with most recent first
+        return ordersByEmail[0];
+      },
+      getOrdersSince: (email, since) => {
+        const ordersByEmail = get().getOrdersByEmail(email);
+        const sinceDate = new Date(since);
+        return ordersByEmail.filter(
+          (order) => new Date(order.updated_at) > sinceDate
+        );
+      },
+    }),
+    {
+      name: 'vkart_all_orders',
       storage: createStorage(),
     } as any
   )

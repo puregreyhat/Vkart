@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useCartStore, useCheckoutStore, useOrderStore } from '@/lib/store';
+import { useCartStore, useCheckoutStore, useOrderStore, useAllOrdersStore } from '@/lib/store';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -12,7 +12,10 @@ import {
   formatDate,
   getStorageInstructions,
   formatCurrency,
+  normalizeEmail,
+  isValidEmail,
 } from '@/lib/utils';
+import { pushOrderToAPI } from '@/lib/apiSync';
 import { useDarkMode } from '@/lib/useDarkMode';
 
 export default function CheckoutPage() {
@@ -20,8 +23,10 @@ export default function CheckoutPage() {
   const { cart, updateQuantity, removeFromCart, getTotal, getItemCount, clearCart } = useCartStore();
   const { customerInfo, setCustomerInfo } = useCheckoutStore();
   const { setLastOrder } = useOrderStore();
+  const { addOrder } = useAllOrdersStore();
   const { darkMode } = useDarkMode();
 
+  const [email, setEmail] = useState(customerInfo.email);
   const [name, setName] = useState(customerInfo.name);
   const [phone, setPhone] = useState(customerInfo.phone);
   const [address, setAddress] = useState(customerInfo.address);
@@ -32,6 +37,15 @@ export default function CheckoutPage() {
   const total = subtotal + deliveryFee + packagingFee;
 
   const handlePlaceOrder = () => {
+    // Validate email first
+    if (!email.trim()) {
+      alert('Please enter your email address');
+      return;
+    }
+    if (!isValidEmail(email)) {
+      alert('Please enter a valid email address');
+      return;
+    }
     if (!name.trim()) {
       alert('Please enter your name');
       return;
@@ -46,11 +60,12 @@ export default function CheckoutPage() {
     }
 
     // Save customer info
-    setCustomerInfo({ name, phone, address });
+    setCustomerInfo({ email, name, phone, address });
 
     // Generate order data
     const orderId = 'BLK-' + Date.now();
     const orderDate = new Date();
+    const timestamp = new Date().toISOString();
 
     const productsWithDetails = cart.map((item) => {
       const productId = generateProductId();
@@ -73,6 +88,9 @@ export default function CheckoutPage() {
 
     const orderData = {
       orderId,
+      email: normalizeEmail(email), // NEW: normalized email for API sync
+      created_at: timestamp, // NEW: ISO timestamp
+      updated_at: timestamp, // NEW: ISO timestamp
       orderDate: formatDate(orderDate),
       deliveryAddress: address,
       customerName: name,
@@ -83,8 +101,17 @@ export default function CheckoutPage() {
       total,
     };
 
-    // Save order
+    // Save order to session store (for receipt page)
     setLastOrder(orderData);
+
+    // Save order to global store (for API sync)
+    addOrder(orderData);
+
+    // Push order to API server (async, non-blocking)
+    pushOrderToAPI(orderData).catch(err => {
+      console.error('Failed to sync order to API:', err);
+      // Don't block the user flow if API sync fails
+    });
 
     // Clear cart
     clearCart();
@@ -202,6 +229,26 @@ export default function CheckoutPage() {
 
               {/* Customer Info */}
               <div className="space-y-4 mb-6">
+                <div>
+                  <label className={`block text-sm font-semibold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Email Address *
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="your.email@example.com"
+                    className={`w-full px-4 py-2 border-2 rounded-lg focus:outline-none ${
+                      darkMode
+                        ? 'bg-gray-800 text-white border-gray-700 focus:border-green-500 placeholder-gray-500'
+                        : 'border-gray-300 focus:border-green-500'
+                    }`}
+                  />
+                  <p className={`text-xs mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                    Required for order tracking & NoshNurture sync
+                  </p>
+                </div>
+
                 <div>
                   <label className={`block text-sm font-semibold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                     Your Name *
