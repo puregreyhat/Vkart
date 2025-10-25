@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { supabaseServer } from '@/lib/supabaseServer';
 
 // CORS headers for cross-origin requests
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
@@ -28,9 +29,7 @@ interface OrderData {
   total: number;
 }
 
-// Import the shared orders store from sync endpoint
-// Note: In production, this should be a proper database
-// For now, we'll create a separate instance and rely on the client pushing data
+// Fallback in-memory store
 let ordersStore: OrderData[] = [];
 
 // Helper function to normalize email
@@ -54,27 +53,30 @@ export async function GET(request: NextRequest) {
 
     const normalizedEmail = normalizeEmail(email);
 
-    // Filter orders by email
-    const matchingOrders = ordersStore.filter(
-      order => normalizeEmail(order.email) === normalizedEmail
-    );
+    // Query Supabase if available, otherwise fall back to in-memory store
+    let latestOrder: OrderData | null = null;
+    if (typeof supabaseServer !== 'undefined' && supabaseServer) {
+      const { data, error } = await supabaseServer
+        .from('orders')
+        .select('data')
+        .ilike('email', normalizedEmail)
+        .order('created_at', { ascending: false })
+        .limit(1);
 
-    if (matchingOrders.length === 0) {
-      return NextResponse.json(
-        {
-          success: true,
-          email: normalizedEmail,
-          order: null,
-          message: 'No orders found for this email',
-        },
-        { status: 200, headers: corsHeaders }
+      if (error) {
+        console.error('Supabase select error:', error);
+      } else if (data && data.length > 0) {
+        latestOrder = data[0].data as OrderData;
+      }
+    } else {
+      const matchingOrders = ordersStore.filter(
+        (order) => normalizeEmail(order.email) === normalizedEmail
       );
+      if (matchingOrders.length > 0) {
+        latestOrder = matchingOrders
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+      }
     }
-
-    // Sort by created_at descending and get the first one (most recent)
-    const latestOrder = matchingOrders.sort((a, b) => 
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    )[0];
 
     return NextResponse.json(
       {
@@ -99,16 +101,32 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { orders } = body;
 
-    // Allow client to push orders to server
     if (orders && Array.isArray(orders)) {
-      orders.forEach((order: OrderData) => {
-        const existingIndex = ordersStore.findIndex(o => o.orderId === order.orderId);
-        if (existingIndex >= 0) {
-          ordersStore[existingIndex] = order;
-        } else {
-          ordersStore.push(order);
+      if (typeof supabaseServer !== 'undefined' && supabaseServer) {
+        const upserts = orders.map((order: OrderData) => ({
+          order_id: order.orderId,
+          email: order.email,
+          created_at: order.created_at,
+          updated_at: order.updated_at,
+          order_date: order.orderDate,
+          delivery_address: order.deliveryAddress,
+          customer_name: order.customerName,
+          customer_phone: order.customerPhone,
+          data: order,
+        }));
+
+        const { error } = await supabaseServer.from('orders').upsert(upserts, { onConflict: 'order_id' });
+        if (error) {
+          console.error('Supabase upsert error:', error);
+          return NextResponse.json({ error: 'Failed to store orders' }, { status: 500, headers: corsHeaders });
         }
-      });
+      } else {
+        orders.forEach((order: OrderData) => {
+          const existingIndex = ordersStore.findIndex((o) => o.orderId === order.orderId);
+          if (existingIndex >= 0) ordersStore[existingIndex] = order;
+          else ordersStore.push(order);
+        });
+      }
 
       return NextResponse.json(
         {
@@ -120,15 +138,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(
-      { error: 'Invalid request - orders array required' },
-      { status: 400, headers: corsHeaders }
-    );
+    return NextResponse.json({ error: 'Invalid request - orders array required' }, { status: 400, headers: corsHeaders });
   } catch (error) {
     console.error('POST latest error:', error);
-    return NextResponse.json(
-      { error: 'Invalid request body' },
-      { status: 400, headers: corsHeaders }
-    );
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400, headers: corsHeaders });
   }
 }

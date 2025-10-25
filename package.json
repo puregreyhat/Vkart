@@ -14,7 +14,8 @@
     "qrcode": "^1.5.4",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "react-qr-code": "^2.0.18",
+  "react-qr-code": "^2.0.18",
+  "@supabase/supabase-js": "^2.27.0",
     "zustand": "^5.0.8"
   },
   "devDependencies": {

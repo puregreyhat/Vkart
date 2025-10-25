@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { supabaseServer } from '@/lib/supabaseServer';
 
 // CORS headers for cross-origin requests
 const corsHeaders = {
@@ -46,15 +47,36 @@ export async function POST(request: NextRequest) {
 
     // If orders are provided, store them (for VKart to push orders)
     if (orders && Array.isArray(orders)) {
-      // Add/update orders in store
-      orders.forEach((order: OrderData) => {
-        const existingIndex = ordersStore.findIndex(o => o.orderId === order.orderId);
-        if (existingIndex >= 0) {
-          ordersStore[existingIndex] = order;
-        } else {
-          ordersStore.push(order);
+      // If Supabase is configured, upsert orders there; otherwise update in-memory store
+      if (typeof supabaseServer !== 'undefined') {
+        // Upsert each order into 'orders' table
+        const upserts = orders.map((order: OrderData) => ({
+          order_id: order.orderId,
+          email: order.email,
+          created_at: order.created_at,
+          updated_at: order.updated_at,
+          order_date: order.orderDate,
+          delivery_address: order.deliveryAddress,
+          customer_name: order.customerName,
+          customer_phone: order.customerPhone,
+          data: order,
+        }));
+
+        const { error } = await supabaseServer.from('orders').upsert(upserts, { onConflict: 'order_id' });
+        if (error) {
+          console.error('Supabase upsert error:', error);
         }
-      });
+      } else {
+        // Add/update orders in memory
+        orders.forEach((order: OrderData) => {
+          const existingIndex = ordersStore.findIndex(o => o.orderId === order.orderId);
+          if (existingIndex >= 0) {
+            ordersStore[existingIndex] = order;
+          } else {
+            ordersStore.push(order);
+          }
+        });
+      }
     }
 
     // Validate email for retrieval
@@ -67,10 +89,25 @@ export async function POST(request: NextRequest) {
 
     const normalizedEmail = normalizeEmail(email);
 
-    // Filter orders by email
-    let matchingOrders = ordersStore.filter(
-      order => normalizeEmail(order.email) === normalizedEmail
-    );
+    // Filter orders by email - prefer Supabase if available
+    let matchingOrders: OrderData[] = [];
+    if (typeof supabaseServer !== 'undefined') {
+      const { data, error } = await supabaseServer
+        .from('orders')
+        .select('data')
+        .ilike('email', normalizedEmail)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Supabase select error:', error);
+      } else if (data) {
+        matchingOrders = data.map((r: any) => r.data as OrderData);
+      }
+    } else {
+      matchingOrders = ordersStore.filter(
+        order => normalizeEmail(order.email) === normalizedEmail
+      );
+    }
 
     // Apply updated_since filter if provided
     if (updated_since) {
