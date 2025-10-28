@@ -562,7 +562,7 @@ export const products: Product[] = [
   id: 'besan-01',
   name: 'Fortune Gram Flour (Besan)',
   price: 95,
-  image: 'https://cdn.grofers.com/cdn-cgi/image/f=auto,fit=scale-down,q=70,metadata=none,w=450/da/cms-assets/cms/product/7a563d09-22de-448b-8f73-52b6c6f086f2.png',
+  image: 'https://m.media-amazon.com/images/I/81JmTiQA68L.jpg',
   category: 'atta',
   weight: '1 kg',
   productType: 'grain',
