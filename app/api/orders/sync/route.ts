@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseServer } from '@/lib/supabaseServer';
+import { isSupabaseConfigured, getSupabaseServer } from '@/lib/supabaseServer';
 
 // CORS headers for cross-origin requests
 const corsHeaders = {
@@ -48,23 +48,28 @@ export async function POST(request: NextRequest) {
     // If orders are provided, store them (for VKart to push orders)
     if (orders && Array.isArray(orders)) {
       // If Supabase is configured, upsert orders there; otherwise update in-memory store
-      if (typeof supabaseServer !== 'undefined') {
-        // Upsert each order into 'orders' table
-        const upserts = orders.map((order: OrderData) => ({
-          order_id: order.orderId,
-          email: order.email,
-          created_at: order.created_at,
-          updated_at: order.updated_at,
-          order_date: order.orderDate,
-          delivery_address: order.deliveryAddress,
-          customer_name: order.customerName,
-          customer_phone: order.customerPhone,
-          data: order,
-        }));
+      if (isSupabaseConfigured()) {
+        try {
+          const supabaseServer = getSupabaseServer();
+          // Upsert each order into 'orders' table
+          const upserts = orders.map((order: OrderData) => ({
+            order_id: order.orderId,
+            email: order.email,
+            created_at: order.created_at,
+            updated_at: order.updated_at,
+            order_date: order.orderDate,
+            delivery_address: order.deliveryAddress,
+            customer_name: order.customerName,
+            customer_phone: order.customerPhone,
+            data: order,
+          }));
 
-        const { error } = await supabaseServer.from('orders').upsert(upserts, { onConflict: 'order_id' });
-        if (error) {
-          console.error('Supabase upsert error:', error);
+          const { error } = await supabaseServer.from('orders').upsert(upserts, { onConflict: 'order_id' });
+          if (error) {
+            console.error('Supabase upsert error:', error);
+          }
+        } catch (error) {
+          console.error('Supabase error:', error);
         }
       } else {
         // Add/update orders in memory
@@ -91,17 +96,22 @@ export async function POST(request: NextRequest) {
 
     // Filter orders by email - prefer Supabase if available
     let matchingOrders: OrderData[] = [];
-    if (typeof supabaseServer !== 'undefined') {
-      const { data, error } = await supabaseServer
-        .from('orders')
-        .select('data')
-        .ilike('email', normalizedEmail)
-        .order('created_at', { ascending: false });
+    if (isSupabaseConfigured()) {
+      try {
+        const supabaseServer = getSupabaseServer();
+        const { data, error } = await supabaseServer
+          .from('orders')
+          .select('data')
+          .ilike('email', normalizedEmail)
+          .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Supabase select error:', error);
-      } else if (data) {
-        matchingOrders = data.map((r: any) => r.data as OrderData);
+        if (error) {
+          console.error('Supabase select error:', error);
+        } else if (data) {
+          matchingOrders = data.map((r: any) => r.data as OrderData);
+        }
+      } catch (error) {
+        console.error('Supabase error:', error);
       }
     } else {
       matchingOrders = ordersStore.filter(

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseServer } from '@/lib/supabaseServer';
+import { isSupabaseConfigured, getSupabaseServer } from '@/lib/supabaseServer';
 
 // CORS headers for cross-origin requests
 const corsHeaders = {
@@ -55,18 +55,23 @@ export async function GET(request: NextRequest) {
 
     // Query Supabase if available, otherwise fall back to in-memory store
     let latestOrder: OrderData | null = null;
-    if (typeof supabaseServer !== 'undefined' && supabaseServer) {
-      const { data, error } = await supabaseServer
-        .from('orders')
-        .select('data')
-        .ilike('email', normalizedEmail)
-        .order('created_at', { ascending: false })
-        .limit(1);
+    if (isSupabaseConfigured()) {
+      try {
+        const supabaseServer = getSupabaseServer();
+        const { data, error } = await supabaseServer
+          .from('orders')
+          .select('data')
+          .ilike('email', normalizedEmail)
+          .order('created_at', { ascending: false })
+          .limit(1);
 
-      if (error) {
-        console.error('Supabase select error:', error);
-      } else if (data && data.length > 0) {
-        latestOrder = data[0].data as OrderData;
+        if (error) {
+          console.error('Supabase select error:', error);
+        } else if (data && data.length > 0) {
+          latestOrder = data[0].data as OrderData;
+        }
+      } catch (error) {
+        console.error('Supabase error:', error);
       }
     } else {
       const matchingOrders = ordersStore.filter(
@@ -102,23 +107,28 @@ export async function POST(request: NextRequest) {
     const { orders } = body;
 
     if (orders && Array.isArray(orders)) {
-      if (typeof supabaseServer !== 'undefined' && supabaseServer) {
-        const upserts = orders.map((order: OrderData) => ({
-          order_id: order.orderId,
-          email: order.email,
-          created_at: order.created_at,
-          updated_at: order.updated_at,
-          order_date: order.orderDate,
-          delivery_address: order.deliveryAddress,
-          customer_name: order.customerName,
-          customer_phone: order.customerPhone,
-          data: order,
-        }));
+      if (isSupabaseConfigured()) {
+        try {
+          const supabaseServer = getSupabaseServer();
+          const upserts = orders.map((order: OrderData) => ({
+            order_id: order.orderId,
+            email: order.email,
+            created_at: order.created_at,
+            updated_at: order.updated_at,
+            order_date: order.orderDate,
+            delivery_address: order.deliveryAddress,
+            customer_name: order.customerName,
+            customer_phone: order.customerPhone,
+            data: order,
+          }));
 
-        const { error } = await supabaseServer.from('orders').upsert(upserts, { onConflict: 'order_id' });
-        if (error) {
-          console.error('Supabase upsert error:', error);
-          return NextResponse.json({ error: 'Failed to store orders' }, { status: 500, headers: corsHeaders });
+          const { error } = await supabaseServer.from('orders').upsert(upserts, { onConflict: 'order_id' });
+          if (error) {
+            console.error('Supabase upsert error:', error);
+            return NextResponse.json({ error: 'Failed to store orders' }, { status: 500, headers: corsHeaders });
+          }
+        } catch (error) {
+          console.error('Supabase error:', error);
         }
       } else {
         orders.forEach((order: OrderData) => {
