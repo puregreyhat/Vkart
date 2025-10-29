@@ -70,8 +70,6 @@ export default function CheckoutPage() {
     const productsWithDetails = cart.map((item) => {
       const productId = generateProductId();
       const batchNumber = generateBatchNumber();
-      const expiryDate = generateExpiryDate(item.category, item.name);
-      const daysUntilExpiry = getDaysUntilExpiry(expiryDate);
       const manufactureDate = new Date();
       manufactureDate.setDate(manufactureDate.getDate() - Math.floor(Math.random() * 30));
 
@@ -80,8 +78,9 @@ export default function CheckoutPage() {
         productId,
         batchNumber,
         manufactureDate: formatDate(manufactureDate),
-        expiryDate: formatDate(expiryDate),
-        daysUntilExpiry,
+        // Use existing expiry data from the product instead of generating new ones
+        expiryDate: item.expiryDate || formatDate(generateExpiryDate(item.category, item.name)),
+        daysUntilExpiry: item.daysUntilExpiry || getDaysUntilExpiry(generateExpiryDate(item.category, item.name)),
         storageInstructions: getStorageInstructions(item.category, item.name),
       };
     });
