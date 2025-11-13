@@ -252,6 +252,16 @@ export const products: Product[] = [
     productType: 'other',
     ...getExpiryData(10, 3), // Arrived 3 days ago, expires in 10 days
   },
+  {
+    id: 'dairy-14',
+    name: 'iD Idli & Dosa Batter - 1 kg',
+    price: 100,
+    image: 'https://cdn.grofers.com/cdn-cgi/image/f=auto,fit=scale-down,q=70,metadata=none,w=720/da/cms-assets/cms/product/74481bba-ac49-4e64-a907-1a89660196dc.png',
+    category: 'dairy',
+    weight: '1 kg',
+    productType: 'other',
+    ...getExpiryData(7, 1), // Arrived 3 days ago, expires in 10 days
+  },
 
   // Snacks & Munchies (10 products)
   {
